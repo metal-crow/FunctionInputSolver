@@ -30,7 +30,7 @@ class Action{
 	public:
 		Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable);
 		Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v);
-		Action(std::vector<Action> prev_actions);
+		Action(Instruction_Types op, std::vector<Action> prev_actions);
 		Instruction_Types operation;
 		STORAGE_OPTION storage;
 
@@ -51,7 +51,8 @@ Action::Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v){
 	storage = stor;
 	const_value = const_v;
 }
-Action::Action(std::vector<Action> prev_actions){
+Action::Action(Instruction_Types op, std::vector<Action> prev_actions){
+	operation = op;
 	actions = prev_actions;
 }
 
@@ -82,6 +83,25 @@ typedef struct {
 
 static Current_Program_State current_program_state;
 
+//given an instruction that takes from multiple registers and stores the result in 1 output register
+void copy_from_action_histories(Instruction instr){
+	//malloc action history array
+	std::vector<Action> from_action_history = std::vector<Action>(instr.register_i_from.size());
+
+	//clone each from register's action chain
+	for (size_t i = 0; i < instr.register_i_from.size(); i++){
+		Register from_register = current_program_state.registers[instr.register_i_from[i]];
+
+		std::vector<Action> reg_i_actions = std::vector<Action>(from_register.action_chain.size());
+		for (size_t j = 0; j < from_register.action_chain.size(); j++){
+			reg_i_actions.push_back(from_register.action_chain[j]);
+		}
+		from_action_history.push_back(Action(instr.action, reg_i_actions));
+	}
+
+	//copy the combined history into to register
+	current_program_state.registers[instr.register_i_to].add_action(Action(instr.action, from_action_history));
+}
 
 int main(void){
 	printf("hello");
@@ -145,21 +165,10 @@ int main(void){
 				break;
 
 			case ADD:
-				//malloc action history array
-				std::vector<Action> from_action_history = std::vector<Action>(instr.register_i_from.size());
-
-				//clone each from register's action chain
-				for (size_t i = 0; i < instr.register_i_from.size(); i++){
-					std::vector<Action> reg_i_actions = std::vector<Action>(current_program_state.registers[i].action_chain.size());
-					for (size_t j = 0; j < current_program_state.registers[i].action_chain.size(); j++){
-						reg_i_actions.push_back(current_program_state.registers[i].action_chain[i]);
-					}
-					from_action_history.push_back(Action(reg_i_actions));
-				}
-
-				//copy the combined history into to register
-				current_program_state.registers[instr.register_i_to].add_action(Action(from_action_history));
+				copy_from_action_histories(instr);
 				break;
+
+
 		}
 	}
 		

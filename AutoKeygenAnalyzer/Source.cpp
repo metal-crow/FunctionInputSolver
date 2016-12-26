@@ -24,19 +24,20 @@ typedef enum {
 	CONSTANT
 } STORAGE_OPTION;
 
+
 //what is done to the register by an instruction
 class Action{
 	public:
 		Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable);
 		Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v);
+		Action(std::vector<Action> prev_actions);
 		Instruction_Types operation;
 		STORAGE_OPTION storage;
 
 		//these are mutually exclusive
 		size_t key_byte_variable_i;
 		uint64_t const_value;
-
-		//TODO way of determining this action was interprited with only its fellows
+		std::vector<Action> actions;//used if these action must be interprited in isolation
 };
 Action::Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable){
 	assert(stor != CONSTANT);
@@ -50,6 +51,10 @@ Action::Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v){
 	storage = stor;
 	const_value = const_v;
 }
+Action::Action(std::vector<Action> prev_actions){
+	actions = prev_actions;
+}
+
 
 //a register. Stores history of actions to it
 class Register{
@@ -140,12 +145,25 @@ int main(void){
 				break;
 
 			case ADD:
+				//malloc action history array
+				std::vector<Action> from_action_history = std::vector<Action>(instr.register_i_from.size());
+
+				//clone each from register's action chain
 				for (size_t i = 0; i < instr.register_i_from.size(); i++){
-					//copy in each registers action history (include execution order)
+					std::vector<Action> reg_i_actions = std::vector<Action>(current_program_state.registers[i].action_chain.size());
+					for (size_t j = 0; j < current_program_state.registers[i].action_chain.size(); j++){
+						reg_i_actions.push_back(current_program_state.registers[i].action_chain[i]);
+					}
+					from_action_history.push_back(Action(reg_i_actions));
 				}
+
+				//copy the combined history into to register
+				current_program_state.registers[instr.register_i_to].add_action(Action(from_action_history));
+				break;
 		}
 	}
 		
+		//convert action chain to equations
 
 		//try and solve
 }

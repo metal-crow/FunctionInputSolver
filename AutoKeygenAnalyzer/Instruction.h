@@ -20,8 +20,7 @@ typedef enum {
 
 typedef struct {
 	uint32_t register_i_to;
-	uint32_t register_i_from1;//this is the one used for STORE
-	uint32_t register_i_from2;
+	std::vector<uint32_t> register_i_from;//max size of 2, min of 1
 
 	uint64_t mem_address_to;
 	uint64_t mem_address_from;

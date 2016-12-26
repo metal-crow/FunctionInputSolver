@@ -7,14 +7,20 @@
 
 static std::vector<std::vector<uint8_t>> key_byte_variables;//this contains unique variables (a section of the key bytes). If two key byte sections are the same, they are same vairable.
 
-size_t find_variable_i_for_key_bytes(std::vector<uint8_t>){
-
+size_t find_variable_i_for_key_bytes(std::vector<uint8_t> input_vars){
+	for (size_t i = 0; i < key_byte_variables.size(); i++){
+		if (input_vars == key_byte_variables[i]){
+			return i;
+		}
+	}
+	key_byte_variables.push_back(input_vars);
+	return key_byte_variables.size() - 1;
 }
 
 //What this register/mem location is loaded with
 typedef enum {
 	KEY_DATA,
-	ACCUMULATOR,//any modified key data in general. id is inited when an ACCUMULATOR is created
+	ACCUMULATOR,//any modified key data in general.
 	CONSTANT
 } STORAGE_OPTION;
 
@@ -29,6 +35,8 @@ class Action{
 		//these are mutually exclusive
 		size_t key_byte_variable_i;
 		uint64_t const_value;
+
+		//TODO way of determining this action was interprited with only its fellows
 };
 Action::Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable){
 	assert(stor != CONSTANT);
@@ -48,12 +56,16 @@ class Register{
 	public:
 		Register();
 		void reset(void);
+		void add_action(Action act);
 
 		std::vector<Action> action_chain;//history of actions to this register. This is the main principle
 };
 Register::Register(){};
 void Register::reset(){
 	action_chain.clear();
+}
+void Register::add_action(Action act){
+	action_chain.push_back(act);
 }
 
 //state of CPU. Stores registers and mem locations (registers)
@@ -106,7 +118,7 @@ int main(void){
 					//will never be key if doesnt exist, key mem/location created on init
 					//only option must be this load is some constant/bootstrap value for key verify
 					current_program_state.memory_locations[instr.mem_address_from] = Register();
-					current_program_state.memory_locations[instr.mem_address_from].action_chain.push_back(Action(LOAD, CONSTANT, constant_val));
+					current_program_state.memory_locations[instr.mem_address_from].add_action(Action(LOAD, CONSTANT, constant_val));
 				}
 
 				//copy the register and its history from mem
@@ -116,7 +128,7 @@ int main(void){
 			//moving an immediate means this register's history is reset, and it is only a constant
 			case MOVE:
 				current_program_state.registers[instr.register_i_to].reset();
-				current_program_state.memory_locations[instr.register_i_to].action_chain.push_back(Action(MOVE, CONSTANT, constant_val));
+				current_program_state.memory_locations[instr.register_i_to].add_action(Action(MOVE, CONSTANT, constant_val));
 				break;
 
 			//copy the register and its history into mem
@@ -124,11 +136,13 @@ int main(void){
 				if (!current_program_state.memory_locations.count(instr.mem_address_to)){
 					current_program_state.memory_locations[instr.mem_address_to] = Register();
 				}
-				memcpy(&current_program_state.memory_locations[instr.mem_address_to], &current_program_state.registers[instr.register_i_from1], sizeof(Register));
+				memcpy(&current_program_state.memory_locations[instr.mem_address_to], &current_program_state.registers[instr.register_i_from.at(0)], sizeof(Register));
 				break;
 
 			case ADD:
-				if (current_program_state.registers[instr.register_i_from].contents)
+				for (size_t i = 0; i < instr.register_i_from.size(); i++){
+					//copy in each registers action history (include execution order)
+				}
 		}
 	}
 		

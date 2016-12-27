@@ -49,7 +49,6 @@ static Current_Program_State current_program_state;
 
 //given an instruction that takes from multiple registers and stores the result in 1 output register
 void copy_from_action_histories(Instruction instr){
-	//malloc action history array
 	std::vector<Action> from_action_history = std::vector<Action>(instr.register_i_from.size());
 
 	//clone each from register's action chain
@@ -138,7 +137,7 @@ int main(void){
 			//moving an immediate means this register's history is reset, and it is only a constant
 			case MOVE:
 				current_program_state.registers[instr.register_i_to].reset();
-				current_program_state.memory_locations[instr.register_i_to].add_action(Action(LOAD, CONSTANT, constant_val));
+				current_program_state.memory_locations[instr.register_i_to].add_action(Action(LOAD, CONSTANT, instr.constant_val));
 				break;
 
 			//copy the register and its history into mem
@@ -146,7 +145,8 @@ int main(void){
 				if (!current_program_state.memory_locations.count(instr.mem_address_to)){
 					current_program_state.memory_locations[instr.mem_address_to] = Register();
 				}
-				memcpy(&current_program_state.memory_locations[instr.mem_address_to], &current_program_state.registers[instr.register_i_from.at(0)], sizeof(Register));
+				assert(instr.register_i_from.size() == 1);
+				memcpy(&current_program_state.memory_locations[instr.mem_address_to], &current_program_state.registers[instr.register_i_from[0]], sizeof(Register));
 				break;
 
 			case ADD:

@@ -79,8 +79,8 @@
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CPUState.h" />
-    <ClInclude Include="Instruction.h" />
+    <ClInclude Include="Action.hpp" />
+    <ClInclude Include="Instruction.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

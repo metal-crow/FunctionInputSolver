@@ -2,6 +2,7 @@
 #define INSTRUCTIONS_H
 
 #include <stdint.h>
+#include <vector>
 
 //Defines what each instruction is doing. 
 typedef enum {
@@ -24,6 +25,7 @@ typedef struct {
 
 	uint64_t mem_address_to;
 	uint64_t mem_address_from;
+	uint8_t num_read_bytes;
 
 	Instruction_Types action;
 } Instruction;

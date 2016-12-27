@@ -1,14 +1,17 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <unordered_map>
-#include <cassert>
+#include <set>
 
-#include "Instruction.h"
+#include "Instruction.hpp"
+#include "Action.hpp"
 
-static std::vector<std::vector<uint8_t>> key_byte_variables;//this contains unique variables (a section of the key bytes). If two key byte sections are the same, they are same vairable.
 
-size_t find_variable_i_for_key_bytes(std::vector<uint8_t> input_vars){
+static std::vector<std::vector<uint64_t>> key_byte_variables;//this contains unique variables (a section of the key bytes). If two key byte sections are the same, they are same vairable.
+
+size_t find_variable_i_for_key_bytes(std::vector<uint64_t> input_vars){
 	for (size_t i = 0; i < key_byte_variables.size(); i++){
+		//order does matter, but theres no way to reorder anyway
 		if (input_vars == key_byte_variables[i]){
 			return i;
 		}
@@ -17,46 +20,6 @@ size_t find_variable_i_for_key_bytes(std::vector<uint8_t> input_vars){
 	return key_byte_variables.size() - 1;
 }
 
-//What this register/mem location is loaded with
-typedef enum {
-	KEY_DATA,
-	ACCUMULATOR,//any modified key data in general.
-	CONSTANT
-} STORAGE_OPTION;
-
-
-//what is done to the register by an instruction
-class Action{
-	public:
-		Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable);
-		Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v);
-		Action(Instruction_Types op, std::vector<Action> prev_actions);
-		Instruction_Types operation;
-		STORAGE_OPTION storage;
-
-		//these are mutually exclusive
-		size_t key_byte_variable_i;
-		uint64_t const_value;
-		std::vector<Action> actions;//used if these action must be interprited in isolation
-};
-Action::Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable){
-	assert(stor != CONSTANT);
-	operation = op;
-	storage = stor;
-	key_byte_variable_i = variable;
-}
-Action::Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v){
-	assert(stor == CONSTANT);
-	operation = op;
-	storage = stor;
-	const_value = const_v;
-}
-Action::Action(Instruction_Types op, std::vector<Action> prev_actions){
-	operation = op;
-	actions = prev_actions;
-}
-
-
 //a register. Stores history of actions to it
 class Register{
 	public:
@@ -64,6 +27,7 @@ class Register{
 		void reset(void);
 		void add_action(Action act);
 
+		bool compared=false;
 		std::vector<Action> action_chain;//history of actions to this register. This is the main principle
 };
 Register::Register(){};
@@ -76,12 +40,12 @@ void Register::add_action(Action act){
 
 //state of CPU. Stores registers and mem locations (registers)
 typedef struct {
-	Register* registers;
+	std::vector<Register> registers;
 	std::unordered_map<uint64_t, Register> memory_locations;
 } Current_Program_State;
 
-
 static Current_Program_State current_program_state;
+
 
 //given an instruction that takes from multiple registers and stores the result in 1 output register
 void copy_from_action_histories(Instruction instr){
@@ -104,8 +68,6 @@ void copy_from_action_histories(Instruction instr){
 }
 
 int main(void){
-	printf("hello");
-
 	//read in assembly function
 	/*
 	sum=0
@@ -118,7 +80,9 @@ int main(void){
 
 	//loop (optional, usually we know key length at start)
 		//unroll for current key length (n)
+		//also convert any instructions with immediates to a MOVE then the instruction
 		//(TODO) Handle self modifying code here (past and future alterations)
+		//(TODO) How to handle jmps, if statements?
 		/*
 		sum=0
 		sum+=key[0]
@@ -138,22 +102,43 @@ int main(void){
 
 		switch (instr.action){
 			case LOAD:
-				//if mem location isn't known to us
+				//if mem location isn't known to us, it can't be a key (since key mem/location created on init)
 				if (!current_program_state.memory_locations.count(instr.mem_address_from)){
-					//will never be key if doesnt exist, key mem/location created on init
 					//only option must be this load is some constant/bootstrap value for key verify
 					current_program_state.memory_locations[instr.mem_address_from] = Register();
-					current_program_state.memory_locations[instr.mem_address_from].add_action(Action(LOAD, CONSTANT, constant_val));
-				}
+					current_program_state.memory_locations[instr.mem_address_from].add_action(Action(LOAD, CONSTANT, instr.constant_val));
 
-				//copy the register and its history from mem
-				memcpy(&current_program_state.registers[instr.register_i_to], &current_program_state.memory_locations[instr.mem_address_from], sizeof(Register));
+					current_program_state.registers[instr.register_i_to].reset();
+					current_program_state.registers[instr.register_i_to].add_action(Action(LOAD, CONSTANT, instr.constant_val));
+				}
+				//if location is known and is marked as key
+				else if (current_program_state.memory_locations.count(instr.mem_address_from) && 
+						 current_program_state.memory_locations[instr.mem_address_from].action_chain.size() == 1 &&
+						 current_program_state.memory_locations[instr.mem_address_from].action_chain[0].storage==KEY_DATA)
+				{
+					//get key bytes variable
+					std::vector<uint64_t> key_bytes = std::vector<uint64_t>(instr.num_read_bytes);
+					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
+						assert(current_program_state.memory_locations[i + instr.mem_address_from].action_chain.size()==1 && 
+							   current_program_state.memory_locations[i + instr.mem_address_from].action_chain[0].storage==KEY_DATA);//TODO issue if reading half key half other stuff
+						key_bytes.push_back(i+instr.mem_address_from);
+					}
+					size_t key_bytes_var_i = find_variable_i_for_key_bytes(key_bytes);
+
+					//since we're loading from a pure key, we can just reset the register
+					current_program_state.registers[instr.register_i_to].reset();
+					current_program_state.registers[instr.register_i_to].add_action(Action(LOAD, KEY_DATA, key_bytes_var_i));
+				}
+				//its an accumulator or constant. just copy the register and its history from mem
+				else{
+					memcpy(&current_program_state.registers[instr.register_i_to], &current_program_state.memory_locations[instr.mem_address_from], sizeof(Register));
+				}
 				break;
 				
 			//moving an immediate means this register's history is reset, and it is only a constant
 			case MOVE:
 				current_program_state.registers[instr.register_i_to].reset();
-				current_program_state.memory_locations[instr.register_i_to].add_action(Action(MOVE, CONSTANT, constant_val));
+				current_program_state.memory_locations[instr.register_i_to].add_action(Action(LOAD, CONSTANT, constant_val));
 				break;
 
 			//copy the register and its history into mem
@@ -168,11 +153,44 @@ int main(void){
 				copy_from_action_histories(instr);
 				break;
 
+			case SUBTRACT:
+				copy_from_action_histories(instr);
+				break;
 
+			case MULTIPLY:
+				copy_from_action_histories(instr);
+				break;
+
+			case DIVIDE:
+				copy_from_action_histories(instr);
+				break;
+
+			case AND:
+				copy_from_action_histories(instr);
+				break;
+
+			case OR:
+				copy_from_action_histories(instr);
+				break;
+
+			case XOR:
+				copy_from_action_histories(instr);
+				break;
+
+			case CMP:
+				assert(instr.register_i_from.size() == 1);
+				current_program_state.registers[instr.register_i_to].compared = true;
+				current_program_state.registers[instr.register_i_from[0]].compared = true;
+				break;
 		}
 	}
 		
 		//convert action chain to equations
+	for (size_t i = 0; i < current_program_state.registers.size(); i++){
+		Register reg = current_program_state.registers[i];
+		if (reg.compared){
 
+		}
+	}
 		//try and solve
 }

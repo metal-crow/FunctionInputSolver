@@ -2,7 +2,6 @@
 #define ACTION_H
 
 #include <stdint.h>
-#include <assert.h>
 #include <vector>
 
 #include "Instruction.hpp"
@@ -18,7 +17,7 @@ typedef enum {
 //what is done to the register by an instruction
 class Action{
 public:
-	Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable);
+	Action(void);
 	Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v);
 	Action(Instruction_Types op, std::vector<Action> prev_actions);
 	Instruction_Types operation;
@@ -29,22 +28,5 @@ public:
 	uint64_t const_value;
 	std::vector<Action> actions;//used if these action must be interprited in isolation
 };
-Action::Action(Instruction_Types op, STORAGE_OPTION stor, size_t variable){
-	assert(stor != CONSTANT);
-	operation = op;
-	storage = stor;
-	key_byte_variable_i = variable;
-}
-Action::Action(Instruction_Types op, STORAGE_OPTION stor, uint64_t const_v){
-	assert(stor == CONSTANT);
-	operation = op;
-	storage = stor;
-	const_value = const_v;
-}
-Action::Action(Instruction_Types op, std::vector<Action> prev_actions){
-	operation = op;
-	actions = prev_actions;
-}
-
 
 #endif

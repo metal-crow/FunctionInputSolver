@@ -19,7 +19,10 @@ typedef enum {
 	CMP,
 } Instruction_Types;
 
-typedef struct {
+class Instruction {
+public:
+	Instruction(uint8_t* asm_bytes, uint32_t size);
+
 	uint32_t register_i_to;
 	std::vector<uint32_t> register_i_from;//max size of 2, min of 1
 
@@ -28,6 +31,6 @@ typedef struct {
 	uint8_t num_read_bytes;
 
 	Instruction_Types action;
-} Instruction;
+};
 
 #endif

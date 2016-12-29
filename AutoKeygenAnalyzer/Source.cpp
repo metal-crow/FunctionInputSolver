@@ -115,10 +115,10 @@ int main(void){
 	uc_close(uc);
 }
 
-static void hook_instruction(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t size, void *user_data)
+static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
 	int eflags;
-	printf(">>> Tracing instruction at 0x%x, instruction size = 0x%d, mem type = 0x%d\n", address, size, type);
+	printf(">>> Tracing instruction at 0x%x, instruction size = 0x%d\n", address, size);
 
 	uc_reg_read(uc, UC_X86_REG_EFLAGS, &eflags);
 	printf(">>> --- EFLAGS is 0x%x\n", eflags);
@@ -136,7 +136,13 @@ static void hook_instruction(uc_engine *uc, uc_mem_type type, uint64_t address, 
 	sum+=key[2]
 	return sum==1337
 	*/
-	Instruction instr = Instruction();
+	
+	uint8_t asm_bytes[15];//An x86-64 instruction may be at most 15 bytes in length
+	if (uc_mem_read(uc, address, &asm_bytes, size)){
+		printf("Failed to read instruction, quit!\n");
+		assert(false);
+	}
+	Instruction instr = Instruction(asm_bytes, size);
 
 	switch (instr.action){
 		case LOAD:

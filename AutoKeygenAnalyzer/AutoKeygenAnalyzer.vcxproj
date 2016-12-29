@@ -146,6 +146,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Action.cpp" />
+    <ClCompile Include="Instruction.cpp" />
     <ClCompile Include="Register.cpp" />
     <ClCompile Include="Source.cpp" />
   </ItemGroup>

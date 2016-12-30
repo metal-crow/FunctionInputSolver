@@ -10,3 +10,7 @@ Still in early stages/research, basic idea so far:
 * Interpret the function and generate a log of actions that occur to each discrete piece of data over the function
 * Convert these action logs in polynomial equations
 * Solve the equations
+
+##Libraries
+Using the [Unicorn Emulator](http://www.unicorn-engine.org/) for assembly interpretation  
+Using the [Capstone Disassembler](http://www.capstone-engine.org/download.html) for assembly abstraction  

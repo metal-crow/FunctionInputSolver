@@ -69,6 +69,8 @@ int main(void){
 	sum+=inputstr[i]
 	return sum==1337
 	*/
+	uint8_t input_function_codebytes[8] = { 0x89, 0xD8/*0x18 */ };
+
 	//bootstrap by action_chain.push_back(KEY_DATA, LOAD) to the registers/memlocations that have key
 	for (size_t i = 0; i < 6/*TODO NUM REGISTERS*/; i++){
 		current_program_state.registers.push_back(Register());
@@ -77,6 +79,9 @@ int main(void){
 	uc_engine *uc;
 	uc_err err;
 	uc_hook trace;
+
+	// Initialize capstone disassembler in X86-32bit mode
+	assert(init_capstone(CS_ARCH_X86, CS_MODE_32));
 
 	// Initialize emulator in X86-32bit mode
 	err = uc_open(UC_ARCH_X86, UC_MODE_32, &uc);
@@ -142,92 +147,95 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 		printf("Failed to read instruction, quit!\n");
 		assert(false);
 	}
-	Instruction instr = Instruction(asm_bytes, size);
+	std::vector<Instruction> instructions = convert_asm_to_instruction(asm_bytes, size);
 
-	switch (instr.action){
-		case LOAD:
-			//if mem location isn't known to us, it can't be a key (since key mem/location created on init)
-			if (!current_program_state.memory_locations.count(instr.mem_address_from)){
-				//only option must be this load is some constant/bootstrap value for key verify
-				current_program_state.memory_locations[instr.mem_address_from] = Register();
-				current_program_state.memory_locations[instr.mem_address_from].add_action(Action(LOAD, CONSTANT, instr.constant_val));
+	for (size_t i = 0; i < instructions.size(); i++){
+		Instruction instr = instructions[i];
+		switch (instr.action){
+			case LOAD:
+				//if mem location isn't known to us, it can't be a key (since key mem/location created on init)
+				if (!current_program_state.memory_locations.count(instr.mem_address_from)){
+					//only option must be this load is some constant/bootstrap value for key verify
+					current_program_state.memory_locations[instr.mem_address_from] = Register();
+					current_program_state.memory_locations[instr.mem_address_from].add_action(Action(LOAD, CONSTANT, /*instr.constant_val*/0));
 
-				current_program_state.registers[instr.register_i_to].reset();
-				current_program_state.registers[instr.register_i_to].add_action(Action(LOAD, CONSTANT, instr.constant_val));
-			}
-			//if location is known and is marked as key
-			else if (current_program_state.memory_locations.count(instr.mem_address_from) && 
-						current_program_state.memory_locations[instr.mem_address_from].action_chain.size() == 1 &&
-						current_program_state.memory_locations[instr.mem_address_from].action_chain[0].storage==KEY_DATA)
-			{
-				//get key bytes variable
-				std::vector<uint64_t> key_bytes = std::vector<uint64_t>(instr.num_read_bytes);
-				for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-					assert(current_program_state.memory_locations[i + instr.mem_address_from].action_chain.size()==1 && 
-							current_program_state.memory_locations[i + instr.mem_address_from].action_chain[0].storage==KEY_DATA);//TODO issue if reading half key half other stuff
-					key_bytes.push_back(i+instr.mem_address_from);
+					current_program_state.registers[instr.register_i_to].reset();
+					current_program_state.registers[instr.register_i_to].add_action(Action(LOAD, CONSTANT, /*instr.constant_val*/0));
 				}
-				size_t key_bytes_var_i = find_variable_i_for_key_bytes(key_bytes);
+				//if location is known and is marked as key
+				else if (current_program_state.memory_locations.count(instr.mem_address_from) &&
+						 current_program_state.memory_locations[instr.mem_address_from].action_chain.size() == 1 &&
+						 current_program_state.memory_locations[instr.mem_address_from].action_chain[0].storage == KEY_DATA)
+				{
+					//get key bytes variable
+					std::vector<uint64_t> key_bytes = std::vector<uint64_t>(instr.num_read_bytes);
+					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
+						assert(current_program_state.memory_locations[i + instr.mem_address_from].action_chain.size() == 1 &&
+							   current_program_state.memory_locations[i + instr.mem_address_from].action_chain[0].storage == KEY_DATA);//TODO issue if reading half key half other stuff
+						key_bytes.push_back(i + instr.mem_address_from);
+					}
+					size_t key_bytes_var_i = find_variable_i_for_key_bytes(key_bytes);
 
-				//since we're loading from a pure key, we can just reset the register
+					//since we're loading from a pure key, we can just reset the register
+					current_program_state.registers[instr.register_i_to].reset();
+					current_program_state.registers[instr.register_i_to].add_action(Action(LOAD, KEY_DATA, key_bytes_var_i));
+				}
+				//its an accumulator or constant. just copy the register and its history from mem
+				else{
+					memcpy(&current_program_state.registers[instr.register_i_to], &current_program_state.memory_locations[instr.mem_address_from], sizeof(Register));
+				}
+				break;
+
+				//moving an immediate means this register's history is reset, and it is only a constant
+			case MOVE:
 				current_program_state.registers[instr.register_i_to].reset();
-				current_program_state.registers[instr.register_i_to].add_action(Action(LOAD, KEY_DATA, key_bytes_var_i));
-			}
-			//its an accumulator or constant. just copy the register and its history from mem
-			else{
-				memcpy(&current_program_state.registers[instr.register_i_to], &current_program_state.memory_locations[instr.mem_address_from], sizeof(Register));
-			}
-			break;
-				
-		//moving an immediate means this register's history is reset, and it is only a constant
-		case MOVE:
-			current_program_state.registers[instr.register_i_to].reset();
-			current_program_state.memory_locations[instr.register_i_to].add_action(Action(LOAD, CONSTANT, instr.constant_val));
-			break;
+				current_program_state.memory_locations[instr.register_i_to].add_action(Action(LOAD, CONSTANT, /*instr.constant_val*/0));
+				break;
 
-		//copy the register and its history into mem
-		case STORE:
-			if (!current_program_state.memory_locations.count(instr.mem_address_to)){
-				current_program_state.memory_locations[instr.mem_address_to] = Register();
-			}
-			assert(instr.register_i_from.size() == 1);
-			memcpy(&current_program_state.memory_locations[instr.mem_address_to], &current_program_state.registers[instr.register_i_from[0]], sizeof(Register));
-			break;
+				//copy the register and its history into mem
+			case STORE:
+				if (!current_program_state.memory_locations.count(instr.mem_address_to)){
+					current_program_state.memory_locations[instr.mem_address_to] = Register();
+				}
+				assert(instr.register_i_from.size() == 1);
+				memcpy(&current_program_state.memory_locations[instr.mem_address_to], &current_program_state.registers[instr.register_i_from[0]], sizeof(Register));
+				break;
 
-		case ADD:
-			copy_from_action_histories(instr);
-			break;
+			case ADD:
+				copy_from_action_histories(instr);
+				break;
 
-		case SUBTRACT:
-			copy_from_action_histories(instr);
-			break;
+			case SUBTRACT:
+				copy_from_action_histories(instr);
+				break;
 
-		case MULTIPLY:
-			copy_from_action_histories(instr);
-			break;
+			case MULTIPLY:
+				copy_from_action_histories(instr);
+				break;
 
-		case DIVIDE:
-			copy_from_action_histories(instr);
-			break;
+			case DIVIDE:
+				copy_from_action_histories(instr);
+				break;
 
-		case AND:
-			copy_from_action_histories(instr);
-			break;
+			case AND:
+				copy_from_action_histories(instr);
+				break;
 
-		case OR:
-			copy_from_action_histories(instr);
-			break;
+			case OR:
+				copy_from_action_histories(instr);
+				break;
 
-		case XOR:
-			copy_from_action_histories(instr);
-			break;
+			case XOR:
+				copy_from_action_histories(instr);
+				break;
 
-		case CMP:
-			assert(instr.register_i_from.size() == 1);
-			current_program_state.registers[instr.register_i_to].compared = true;
-			current_program_state.registers[instr.register_i_from[0]].compared = true;
-			//TODO for every compare break, convert action log to poly equation, and solve
-			break;
+			case CMP_JMP:
+				assert(instr.register_i_from.size() == 1);
+				current_program_state.registers[instr.register_i_to].compared = true;
+				current_program_state.registers[instr.register_i_from[0]].compared = true;
+				//TODO for every compare break, convert action log to poly equation, and solve
+				break;
+		}
 	}
 		
 	//convert action chain to equations

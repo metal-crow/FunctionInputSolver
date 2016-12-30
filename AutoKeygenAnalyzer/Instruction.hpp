@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 #include <vector>
+#include <assert.h>
+
+#include <capstone.h>
 
 //Defines what each instruction is doing. 
 typedef enum {
@@ -16,13 +19,13 @@ typedef enum {
 	AND,
 	OR,
 	XOR,
-	CMP,
+	BIT_INVERT,
+	ABS_VAL,
+	CMP_JMP,//only inspect compare if its immediatly followed by jmp (or its built in)
 } Instruction_Types;
 
 class Instruction {
 public:
-	Instruction(uint8_t* asm_bytes, uint32_t size);
-
 	uint32_t register_i_to;
 	std::vector<uint32_t> register_i_from;//max size of 2, min of 1
 
@@ -32,5 +35,10 @@ public:
 
 	Instruction_Types action;
 };
+
+bool init_capstone(cs_arch asm_arch, cs_mode asm_mode);
+
+//necessary to convert 1 instruction to multiple instructions for simplification purposes
+std::vector<Instruction> convert_asm_to_instruction(uint8_t* asm_bytes, uint32_t size);
 
 #endif

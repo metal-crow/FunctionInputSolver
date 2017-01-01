@@ -147,12 +147,14 @@
   <ItemGroup>
     <ClCompile Include="Action.cpp" />
     <ClCompile Include="Instruction.cpp" />
-    <ClCompile Include="Register.cpp" />
+    <ClCompile Include="ProgramState.cpp" />
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Action.hpp" />
     <ClInclude Include="Instruction.hpp" />
+    <ClInclude Include="Instruction_Types.hpp" />
+    <ClInclude Include="ProgramState.hpp" />
     <ClInclude Include="Register.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

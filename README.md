@@ -13,4 +13,4 @@ Still in early stages/research, basic idea so far:
 
 ##Libraries
 Using the [Unicorn Emulator](http://www.unicorn-engine.org/) for assembly interpretation  
-Using the [Capstone Disassembler](http://www.capstone-engine.org/download.html) for assembly abstraction  
+Using the [Capstone Disassembler](http://www.capstone-engine.org/) for assembly abstraction  

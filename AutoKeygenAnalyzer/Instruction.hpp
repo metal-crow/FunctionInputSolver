@@ -10,7 +10,7 @@
 #include "Instruction_Types.hpp"
 
 typedef struct {
-	uint32_t register_i_to;
+	int32_t register_i_to = -1;
 	std::vector<uint32_t> register_i_from;//max size of 2, min of 1
 
 	//since a memory address can use regiser values, define it as an action history

@@ -16,11 +16,11 @@ typedef struct {
 	//since a memory address can use regiser values, define it as an action history
 	Action mem_address_to;
 	Action mem_address_from;
-	uint8_t num_read_bytes;
+	uint8_t num_read_bytes = 0;
 
 	int64_t constant_val;
 
-	Instruction_Types action;
+	Instruction_Types action = INVALID_OPERATION;
 } Instruction;
 
 bool init_capstone(cs_arch asm_arch, cs_mode asm_mode);

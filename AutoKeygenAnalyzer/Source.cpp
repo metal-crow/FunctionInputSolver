@@ -28,6 +28,13 @@ size_t find_variable_i_for_key_byte(Action* act){
 }
 
 
+void convert_mem_instruction_into_single_byte(Action* from_address_w_offset, size_t byte_i){
+	//TODO this must handle 500+1 == 501+0 == 499+2 == eax+1 == {eax+1}+0, so consolidate constants 
+	Action act;
+	Init_Action(&act, ADD, CONSTANT, byte_i);
+	from_address_w_offset->actions.push_back(act);
+}
+
 // callback for tracing instruction
 static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, void *user_data);
 
@@ -151,11 +158,8 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 				//generate actions defining accesing each individual byte
 				std::vector<Action> memory_load_bytes = std::vector<Action>(instr.num_read_bytes);
 				for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-					TODO //TODO this must handle 500+1 == 501+0 == 499+2 == eax+1 == {eax+1}+0, so consolidate constants 
 					Action from_address_w_offset = instr.mem_address_from;
-					Action add_i;
-					Init_Action(&add_i, ADD, CONSTANT, i);
-					from_address_w_offset.actions.push_back(add_i);
+					convert_mem_instruction_into_single_byte(&from_address_w_offset, i);
 
 					memory_load_bytes.push_back(from_address_w_offset);
 
@@ -244,14 +248,26 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 			{
 				Action act;
 				Init_Action(&act, LOAD, CONSTANT, instr.constant_val);
+				//immediate into register
 				if (instr.register_i_to != -1){
 					current_program_state.registers[instr.register_i_to].action_chain.clear();
 					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
 				}
-				else if (instr.mem_address_to.operation != INVALID_OPERATION){
-					TODO
-					current_program_state.registers[instr.register_i_to].action_chain.clear();
-					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
+				//immediate into memory
+				else if (instr.num_read_bytes > 0){
+					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
+						//modify const for single byte
+						uint64_t mask = 0xFF << (i * 8);
+						act.const_value = ((act.const_value & mask) >> (i * 8));//modify constant for the byte distrubution (select a single byte)
+
+						//generate location
+						Action from_address_w_offset = instr.mem_address_from;
+						convert_mem_instruction_into_single_byte(&from_address_w_offset, i);
+
+						//save const action to location
+						current_program_state.memory_locations[from_address_w_offset].action_chain.clear();
+						current_program_state.memory_locations[from_address_w_offset].action_chain.push_back(act);
+					}
 				}
 				else{
 					assert(false);//dont know what happened here

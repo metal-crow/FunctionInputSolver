@@ -1,14 +1,19 @@
+#include <assert.h>
+
 #include "Action.hpp"
 
-void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, int64_t arg){
+void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, std::vector<size_t> key_byte_variables_i){
 	action->operation = op;
 	action->storage = stor;
-	if (stor == CONSTANT){
-		action->const_value = arg;
-	}
-	else{
-		action->key_byte_variable_i = arg;
-	}
+	assert(stor != CONSTANT);
+	action->key_byte_variables_i = key_byte_variables_i;
+}
+
+void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, int64_t constant){
+	action->operation = op;
+	action->storage = stor;
+	assert(stor == CONSTANT);
+	action->const_value = stor;
 }
 
 void Init_Action(Action* action, Instruction_Types op, std::vector<Action> prev_actions){
@@ -32,7 +37,7 @@ bool EQL_Action(const Action* a1, const Action* a2){
 			return (a1->const_value == a2->const_value);
 		}
 		else{
-			return (a1->key_byte_variable_i == a2->key_byte_variable_i);
+			return (a1->key_byte_variables_i == a2->key_byte_variables_i);
 		}
 	}
 	//compare their recursive action subsets

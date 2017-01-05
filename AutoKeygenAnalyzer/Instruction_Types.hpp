@@ -5,7 +5,7 @@
 typedef enum {
 	INVALID_OPERATION,
 	LOAD,
-	MOVE,//only for moving in an immediate
+	MOVE,//only for moving in an immediate (to a register or memory)
 	STORE,
 	ADD,
 	SUBTRACT,
@@ -15,6 +15,8 @@ typedef enum {
 	OR,
 	XOR,
 	BIT_INVERT,
+	LEFT_SHIFT,
+	RIGHT_SHIFT,
 	ABS_VAL,
 	CMP_JMP,//only inspect compare if its immediatly followed by jmp (or its built in)
 } Instruction_Types;

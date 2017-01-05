@@ -10,20 +10,20 @@
 #include "ProgramState.hpp"
 
 
-static std::vector<std::vector<Action>> key_byte_variables;//this contains unique variables (a section of the key bytes). If two key byte sections are the same, they are same vairable.
+static std::vector<Action> key_byte_variables;//defines each byte of the key by the action(s) taken to retrieve it
 
-size_t find_variable_i_for_key_bytes(std::vector<Action> input_vars){
+void create_new_variable_for_key_byte(Action* act){
+	act->key_byte_variables_i.push_back(key_byte_variables.size());
+	key_byte_variables.push_back(*act);
+}
+
+size_t find_variable_i_for_key_byte(Action* act){
 	for (size_t i = 0; i < key_byte_variables.size(); i++){
-		//order does matter, but theres no way to reorder anyway
-		bool match = true;
-		for (size_t j = 0; j < input_vars.size(); j++){
-			match &= EQL_Action(&input_vars[j], &key_byte_variables[i][j]);
-		}
-		if (match){
+		if (EQL_Action(act, &key_byte_variables[i])){
 			return i;
 		}
 	}
-	key_byte_variables.push_back(input_vars);
+	key_byte_variables.push_back(*act);
 	return key_byte_variables.size() - 1;
 }
 
@@ -43,11 +43,26 @@ int main(void){
 	sum+=inputstr[i]
 	return sum==1337
 	*/
-	uint8_t input_function_codebytes[8] = { 0x89, 0x18 };
+	uint8_t input_function_codebytes[8] = { 0x89, 0x18, 0x83, 0xC0, 0x01, 0x89, 0x48, 0x0A };
+
+	for (size_t i = X86_REG_AH; i < X86_REG_ENDING/*TODO NUM REGISTERS*/; i++){
+		Register reg;
+		current_program_state.registers.push_back(reg);
+	}
 
 	//bootstrap by action_chain.push_back(KEY_DATA, LOAD) to the registers/memlocations that have key
-	for (size_t i = 0; i < X86_REG_ENDING/*TODO NUM REGISTERS*/; i++){
-		current_program_state.registers.push_back(Register());
+	for (key_locations){
+		Action key_boot_action;
+		Init_Action(&key_boot_action, LOAD, KEY_DATA, -1);
+		create_new_variable_for_key_byte(&key_boot_action);
+		if (is_register){
+			current_program_state.registers[key_location].action_chain.push_back(key_boot_action);
+		}
+		//this is every byte, no larger
+		else if (is_memory){
+			current_program_state.memory_locations[key_location] = {};
+			current_program_state.memory_locations[key_location].action_chain.push_back(key_boot_action);
+		}
 	}
 
 	uc_engine *uc;
@@ -128,46 +143,98 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 		switch (instr.action){
 			case LOAD:
 			{
-				//if mem location isn't known to us, it can't be a key (since key mem/location created on init)
-				if (!current_program_state.memory_locations.count(instr.mem_address_from)){
+				bool mem_locations_exists = true;
+				bool mem_locations_are_key = true;
+				bool mem_locations_are_const = true;
+				bool mem_locations_are_accum;
+
+				//generate actions defining accesing each individual byte
+				std::vector<Action> memory_load_bytes = std::vector<Action>(instr.num_read_bytes);
+				for (uint8_t i = 0; i < instr.num_read_bytes; i++){
+					TODO //TODO this must handle 500+1 == 501+0 == 499+2 == eax+1 == {eax+1}+0, so consolidate constants 
+					Action from_address_w_offset = instr.mem_address_from;
+					Action add_i;
+					Init_Action(&add_i, ADD, CONSTANT, i);
+					from_address_w_offset.actions.push_back(add_i);
+
+					memory_load_bytes.push_back(from_address_w_offset);
+
+					//check this byte exists as memory location
+					mem_locations_exists &= current_program_state.memory_locations.count(from_address_w_offset);
+					//check this byte is a key
+					if (mem_locations_exists){
+						//FIXME: problem if loading from half key, half other stuff
+						mem_locations_are_key &= current_program_state.memory_locations[from_address_w_offset].action_chain.size() == 1 && 
+												 current_program_state.memory_locations[from_address_w_offset].action_chain[0].storage == KEY_DATA;
+						mem_locations_are_const &= current_program_state.memory_locations[from_address_w_offset].action_chain.size() == 1 &&
+												   current_program_state.memory_locations[from_address_w_offset].action_chain[0].storage == CONSTANT;
+					}
+				}
+				mem_locations_are_accum = !mem_locations_are_key && !mem_locations_are_const;
+
+				//if mem locations arn't known to us, it can't be a key (since key mem/locations created on init)
+				if (!mem_locations_exists){
 					//only option must be this load is some constant/bootstrap value for key verify
-					current_program_state.memory_locations[instr.mem_address_from] = {};
+
+					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
+						current_program_state.memory_locations[memory_load_bytes[i]] = {};
+						Action act;
+						//store in little endian order
+						uint64_t mask = 0xFF << (i * 8);
+						int64_t maskd_and_reshifted_imm = ((instr.constant_val & mask) >> (i * 8));//modify constant for the byte distrubution (select a single byte)
+						Init_Action(&act, LOAD, CONSTANT, maskd_and_reshifted_imm);
+						current_program_state.memory_locations[memory_load_bytes[i]].action_chain.push_back(act);
+					}
+
 					Action act;
 					Init_Action(&act, LOAD, CONSTANT, instr.constant_val);
-					current_program_state.memory_locations[instr.mem_address_from].action_chain.push_back(act);
-
 					current_program_state.registers[instr.register_i_to].action_chain.clear();
 					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
 				}
-				//if location is known and is marked as key
-				else if (current_program_state.memory_locations.count(instr.mem_address_from) &&
-						 current_program_state.memory_locations[instr.mem_address_from].action_chain.size() == 1 &&
-						 current_program_state.memory_locations[instr.mem_address_from].action_chain[0].storage == KEY_DATA)
-				{
-					//get key bytes variable
-					std::vector<Action> key_bytes = std::vector<Action>(instr.num_read_bytes);
+				//if locations are known and marked as key
+				else if (mem_locations_exists && mem_locations_are_key){		
+					//create array for the key variable indexes
+					std::vector<size_t> key_byte_variable_indexs;
 					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-						//generate action for individual bytes
-						Action from_address_w_offset = instr.mem_address_from;
-						Action add_i;
-						Init_Action(&add_i, ADD, CONSTANT, i);
-						from_address_w_offset.actions.push_back(add_i);
-
-						assert(current_program_state.memory_locations[instr.mem_address_from].action_chain.size() == 1 &&
-							   current_program_state.memory_locations[instr.mem_address_from].action_chain[0].storage == KEY_DATA);//TODO issue if reading half key half other stuff
-						key_bytes.push_back(from_address_w_offset);
+						key_byte_variable_indexs.push_back(find_variable_i_for_key_byte(&memory_load_bytes[i]));
 					}
-					size_t key_bytes_var_i = find_variable_i_for_key_bytes(key_bytes);
 
 					//since we're loading from a pure key, we can just reset the register
 					current_program_state.registers[instr.register_i_to].action_chain.clear();
 					Action act;
-					Init_Action(&act, LOAD, KEY_DATA, key_bytes_var_i);
+					Init_Action(&act, LOAD, KEY_DATA, key_byte_variable_indexs);
 					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
 				}
-				//its an accumulator or constant. just copy the register and its history from mem
+				//if its a known constant
+				else if (mem_locations_exists && mem_locations_are_const){
+					Action act_imm;
+					Init_Action(&act_imm, LOAD, CONSTANT, 0);
+					//convert the bytes in memory to full load
+					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
+						//little endian load
+						act_imm.const_value |= (current_program_state.memory_locations[memory_load_bytes[i]].action_chain[0].const_value << (i * 8));
+					}
+					//clear register and load constant
+					current_program_state.registers[instr.register_i_to].action_chain.clear();
+					current_program_state.registers[instr.register_i_to].action_chain.push_back(act_imm);
+				}
+				//if its an accumulator
+				else if (mem_locations_exists && mem_locations_are_accum){
+					//load all the loaded bytes action chains into the register's action chain
+					current_program_state.registers[instr.register_i_to].action_chain.clear();
+
+					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
+						Action act;
+						Init_Action(&act, LOAD, current_program_state.memory_locations[memory_load_bytes[i]].action_chain);
+						current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
+						Action act_shift;
+						Init_Action(&act_shift, LEFT_SHIFT, ACCUMULATOR, (i*8));
+						current_program_state.registers[instr.register_i_to].action_chain.push_back(act_shift);
+					}
+				}
+				//??? Dunno
 				else{
-					memcpy(&current_program_state.registers[instr.register_i_to], &current_program_state.memory_locations[instr.mem_address_from], sizeof(Register));
+					assert(false);
 				}
 				break;
 			}
@@ -175,10 +242,20 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 			//moving an immediate means this register's history is reset, and it is only a constant
 			case MOVE:
 			{
-				current_program_state.registers[instr.register_i_to].action_chain.clear();
 				Action act;
 				Init_Action(&act, LOAD, CONSTANT, instr.constant_val);
-				current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
+				if (instr.register_i_to != -1){
+					current_program_state.registers[instr.register_i_to].action_chain.clear();
+					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
+				}
+				else if (instr.mem_address_to.operation != INVALID_OPERATION){
+					TODO
+					current_program_state.registers[instr.register_i_to].action_chain.clear();
+					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
+				}
+				else{
+					assert(false);//dont know what happened here
+				}
 				break;
 			}
 

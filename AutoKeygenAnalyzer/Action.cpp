@@ -13,7 +13,7 @@ void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, int6
 	action->operation = op;
 	action->storage = stor;
 	assert(stor == CONSTANT);
-	action->const_value = stor;
+	action->const_value = constant;
 }
 
 void Init_Action(Action* action, Instruction_Types op, std::vector<Action> prev_actions){

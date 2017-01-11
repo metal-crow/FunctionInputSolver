@@ -9,7 +9,7 @@
 #include "Action.hpp"
 #include "Instruction_Types.hpp"
 
-typedef struct {
+typedef struct Instruction_S {
 	int32_t register_i_to = -1;
 	std::vector<uint32_t> register_i_from;//max size of 2, min of 1
 

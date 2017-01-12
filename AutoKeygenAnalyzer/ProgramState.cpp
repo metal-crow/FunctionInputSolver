@@ -19,6 +19,13 @@ void copy_from_action_histories(Instruction* instr){
 		from_action_history.push_back(act);
 	}
 
+	//include the constant
+	if (instr->constant_val_has){
+		Action act;
+		Init_Action(&act, instr->action, CONSTANT, instr->constant_val);
+		from_action_history.push_back(act);
+	}
+
 	//copy the combined history into to register
 	Action act;
 	Init_Action(&act, instr->action, from_action_history);

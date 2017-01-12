@@ -18,6 +18,7 @@ typedef struct Instruction_S {
 	Action mem_address_from;
 	uint8_t num_read_bytes = 0;
 
+	bool constant_val_has = false;
 	int64_t constant_val;
 
 	Instruction_Types action = INVALID_OPERATION;

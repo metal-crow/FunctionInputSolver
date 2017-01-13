@@ -23,11 +23,11 @@ struct Action{
 
 	//these are mutually exclusive
 	std::vector<size_t> key_byte_variables_i;//array of key_byte variables this action has (little endian, 1st is least sig)
-	int64_t const_value = -1;
+	int64_t const_value;
 	std::vector<Action> actions;//used if these action must be interprited in isolation
 };
 
-void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, std::vector<size_t>);
+void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, std::vector<size_t> key_byte_variables_i);
 void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, int64_t arg);
 void Init_Action(Action* action, Instruction_Types op, std::vector<Action> prev_actions);
 

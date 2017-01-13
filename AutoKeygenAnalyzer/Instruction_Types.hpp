@@ -4,9 +4,9 @@
 //Defines what each instruction is doing. 
 typedef enum {
 	INVALID_OPERATION,
-	LOAD,
+	LOAD,//not for immediates
 	MOVE,//only for moving in an immediate (to a register or memory)
-	STORE,
+	STORE,//not for immediates
 	ADD,
 	SUBTRACT,
 	MULTIPLY,

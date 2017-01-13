@@ -73,6 +73,7 @@ void interpret_x86(std::vector<Instruction>* instructions, cs_insn *decod_instr)
 			case X86_OP_IMM:
 			{
 				assert(i != 0);//destination can't be immediate
+				instr.constant_val_has = true;
 				instr.constant_val = operand.imm;
 				break;
 			}
@@ -119,7 +120,7 @@ void interpret_x86(std::vector<Instruction>* instructions, cs_insn *decod_instr)
 				else{
 					instr.mem_address_from = act_final;
 				}
-				instr.num_read_bytes = TODO;
+				instr.num_read_bytes = 4;//TMP MUST FIX
 				break;
 			}
 

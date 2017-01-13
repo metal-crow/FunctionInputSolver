@@ -222,9 +222,10 @@ bool EQL_Action(const Action* a1, const Action* a2){
 	if (num_variables_in != find_number_of_variables_in_action((Action*)a2)){
 		return false;
 	}
+	assert(num_variables_in <= sizeof(num_variables_in)*8);//TODO fix this to handle more variables (currently 64 max). Also fix this to not be 2^n
 
 	//generate all binary combinations for n variables (as an integer)
-	uint64_t num_combinations = pow(2, num_variables_in);
+	uint64_t num_combinations = 1 << num_variables_in; //2^num_variables
 	for (uint64_t seq = 0; seq < num_combinations; seq++){
 		//set the variables and solve (always do once in case theres no variables)
 		int64_t result_1 = solve_action_for_variable_settings((Action*)a1, seq);

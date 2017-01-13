@@ -1,7 +1,7 @@
 #ifndef PROGRAMSTATE_H
 #define PROGRAMSTATE_H
 
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "Register.hpp"
@@ -12,7 +12,7 @@
 typedef struct {
 	std::vector<Register> registers;
 	//bytes are little endian ordered
-	std::map<Action, Register, ActionCompare> memory_locations;//since a memory location can be defined by a register value, the location is represented as an action chain
+	std::unordered_map<Action, Register, ActionHash, ActionCompare> memory_locations;//since a memory location can be defined by a register value, the location is represented as an action chain
 } Current_Program_State;
 
 extern Current_Program_State current_program_state;

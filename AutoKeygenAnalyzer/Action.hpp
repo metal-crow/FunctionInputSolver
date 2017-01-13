@@ -32,12 +32,21 @@ void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, int6
 void Init_Action(Action* action, Instruction_Types op, std::vector<Action> prev_actions);
 
 
-//used by the memory map array to compare actions
+//used by the memory_locations array to compare actions
 bool EQL_Action(const Action* a1, const Action* a2);
 struct ActionCompare
 {
 	bool operator() (const Action& a1, const Action& a2) const{
 		return EQL_Action(&a1, &a2);
+	}
+};
+
+//used by the memory_locations array to speed up action access. Can handle collisions using the EQL_Action function
+size_t HASH_Action(const Action* a);
+struct ActionHash
+{
+	size_t operator() (const Action& a) const{
+		return HASH_Action(&a);
 	}
 };
 

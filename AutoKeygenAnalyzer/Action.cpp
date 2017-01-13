@@ -236,3 +236,8 @@ bool EQL_Action(const Action* a1, const Action* a2){
 
 	return true;
 }
+
+size_t HASH_Action(const Action* a){
+	//This has to be quick, so test two cases most likely to fail (all 1 and all 0), combine via xor 
+	return (solve_action_for_variable_settings((Action*)a, (uint64_t)-1) ^ solve_action_for_variable_settings((Action*)a, 0));
+}

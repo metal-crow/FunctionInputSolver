@@ -27,20 +27,13 @@ size_t find_variable_i_for_key_byte(Action* act){
 	return key_byte_variables.size() - 1;
 }
 
-
-void convert_mem_instruction_into_single_byte(Action* from_address_w_offset, size_t byte_i){
-	//TODO this must handle 500+1 == 501+0 == 499+2 == eax+1 == {eax+1}+0, so consolidate constants 
-	Action act;
-	Init_Action(&act, ADD, CONSTANT, byte_i);
-	from_address_w_offset->actions.push_back(act);
-}
-
 // callback for tracing instruction
 static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, void *user_data);
 
 
-// memory address where emulation starts
-#define ADDRESS 0x1000000
+// memory address where emulation starts (2MB)
+#define CODE_ADDRESS (2 * 1024 * 1024)
+#define DATA_ADDRESS 0
 
 int main(void){
 	//read in assembly function
@@ -50,6 +43,12 @@ int main(void){
 	sum+=inputstr[i]
 	return sum==1337
 	*/
+
+	/*
+	mov    DWORD PTR [eax],ebx
+	add    eax,0x1
+	mov    DWORD PTR [eax+0xa],ecx 
+	*/
 	uint8_t input_function_codebytes[8] = { 0x89, 0x18, 0x83, 0xC0, 0x01, 0x89, 0x48, 0x0A };
 
 	for (size_t i = X86_REG_AH; i < X86_REG_ENDING/*TODO NUM REGISTERS*/; i++){
@@ -58,7 +57,7 @@ int main(void){
 	}
 
 	//bootstrap by action_chain.push_back(KEY_DATA, LOAD) to the registers/memlocations that have key
-	for (key_locations){
+	/*for (key_locations){
 		Action key_boot_action;
 		Init_Action(&key_boot_action, LOAD, KEY_DATA, -1);
 		create_new_variable_for_key_byte(&key_boot_action);
@@ -70,7 +69,7 @@ int main(void){
 			current_program_state.memory_locations[key_location] = {};
 			current_program_state.memory_locations[key_location].action_chain.push_back(key_boot_action);
 		}
-	}
+	}*/
 
 	uc_engine *uc;
 	uc_err err;
@@ -87,10 +86,12 @@ int main(void){
 	}
 
 	// map 2MB memory for this emulation
-	uc_mem_map(uc, ADDRESS, 2 * 1024 * 1024, UC_PROT_ALL);
+	uc_mem_map(uc, CODE_ADDRESS, 2 * 1024 * 1024, UC_PROT_ALL);
+	// map 2MB memory for data
+	uc_mem_map(uc, DATA_ADDRESS, 2 * 1024 * 1024, UC_PROT_ALL);
 
 	// write machine code to be emulated to memory
-	if (uc_mem_write(uc, ADDRESS, input_function_codebytes, sizeof(input_function_codebytes))) {
+	if (uc_mem_write(uc, CODE_ADDRESS, input_function_codebytes, sizeof(input_function_codebytes))) {
 		printf("Failed to write emulation code to memory, quit!\n");
 		return -1;
 	}
@@ -98,8 +99,14 @@ int main(void){
 	// tracing all instruction by having @begin > @end
 	uc_hook_add(uc, &trace, UC_HOOK_CODE, hook_instruction, NULL, 1, 0);
 
+	//default all registers to 0
+	for (int i = X86_REG_AH; i < X86_REG_ENDING/*TODO NUM REGISTERS*/; i++){
+		int reg = 0;
+		uc_reg_write(uc, i, &reg);
+	}
+
 	// emulate code in infinite time & unlimited instructions
-	err = uc_emu_start(uc, ADDRESS, ADDRESS + sizeof(input_function_codebytes), 0, 0);
+	err = uc_emu_start(uc, CODE_ADDRESS, CODE_ADDRESS + sizeof(input_function_codebytes), 0, 0);
 	if (err) {
 		printf("Failed on uc_emu_start() with error returned %u: %s\n",
 			   err, uc_strerror(err));
@@ -159,12 +166,14 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 				std::vector<Action> memory_load_bytes = std::vector<Action>(instr.num_read_bytes);
 				for (uint8_t i = 0; i < instr.num_read_bytes; i++){
 					Action from_address_w_offset = instr.mem_address_from;
-					convert_mem_instruction_into_single_byte(&from_address_w_offset, i);
+					Action act_addi;
+					Init_Action(&act_addi, ADD, CONSTANT, i);
+					from_address_w_offset.actions.push_back(act_addi);
 
 					memory_load_bytes.push_back(from_address_w_offset);
 
 					//check this byte exists as memory location
-					mem_locations_exists &= current_program_state.memory_locations.count(from_address_w_offset);
+					mem_locations_exists &= (current_program_state.memory_locations.count(from_address_w_offset)>0);
 					//check this byte is a key
 					if (mem_locations_exists){
 						//FIXME: problem if loading from half key, half other stuff
@@ -223,6 +232,14 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 					current_program_state.registers[instr.register_i_to].action_chain.push_back(act_imm);
 				}
 				//if its an accumulator
+				/*example
+				key[0]												  key[1]												key[2]
+
+				{load,key_val,0}									  {load,key_val,1}										{load,key_val,2}
+				{load,key_val,0},{add,const,1}						  {load,key_val,1},{add,const,2}						{load,key_val,2},{add,const,3}
+
+				{{load,key_val,0},{add,const,1}}, {lshift, accum, 0}, {{load,key_val,1},{add,const,2}}, {lshift, accum, 8}, {{load,key_val,2},{add,const,3}}, {lshift, accum, 16}
+				*/
 				else if (mem_locations_exists && mem_locations_are_accum){
 					//load all the loaded bytes action chains into the register's action chain
 					current_program_state.registers[instr.register_i_to].action_chain.clear();
@@ -262,7 +279,9 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 
 						//generate location
 						Action from_address_w_offset = instr.mem_address_from;
-						convert_mem_instruction_into_single_byte(&from_address_w_offset, i);
+						Action act_addi;
+						Init_Action(&act_addi, ADD, CONSTANT, i);
+						from_address_w_offset.actions.push_back(act_addi);
 
 						//save const action to location
 						current_program_state.memory_locations[from_address_w_offset].action_chain.clear();
@@ -278,11 +297,8 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 			//copy the register and its history into mem
 			case STORE:
 			{
-				if (!current_program_state.memory_locations.count(instr.mem_address_to)){
-					current_program_state.memory_locations[instr.mem_address_to] = {};
-				}
 				assert(instr.register_i_from.size() == 1);
-				memcpy(&current_program_state.memory_locations[instr.mem_address_to], &current_program_state.registers[instr.register_i_from[0]], sizeof(Register));
+				current_program_state.memory_locations[instr.mem_address_to] = current_program_state.registers[instr.register_i_from[0]];
 				break;
 			}
 

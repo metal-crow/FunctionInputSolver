@@ -30,8 +30,8 @@ void Init_Action(Action* action, Instruction_Types op, std::vector<Action> prev_
 static std::unordered_map<size_t, size_t> mapping_from_variable_to_bit;
 
 //counts numbers of variables and also created the variable to bit mapping
-static size_t find_number_of_variables_in_action(Action* a){
-	size_t current_bit = 0;//also doubles as counting number of variables
+static uint64_t find_number_of_variables_in_action(Action* a){
+	uint64_t current_bit = 0;//also doubles as counting number of variables
 
 	std::queue<Action*> action_queue;
 	action_queue.push(a);
@@ -56,12 +56,12 @@ static size_t find_number_of_variables_in_action(Action* a){
 	return current_bit;
 }
 
-static uint8_t variable_to_binary(size_t variable, uint32_t variable_settings){
+static uint8_t variable_to_binary(size_t variable, uint64_t variable_settings){
 	//use the integer as a bit sequence and find this variable's chosen bit
 	size_t bit_i = mapping_from_variable_to_bit[variable];
 
 	//and out every other bit
-	uint32_t result = variable_settings & ~bit_i;
+	uint64_t result = variable_settings & ~bit_i;
 	//move bit back to least sig bit (also cut off rest of bits)
 	result = result >> (bit_i - 1);
 	//check
@@ -70,7 +70,7 @@ static uint8_t variable_to_binary(size_t variable, uint32_t variable_settings){
 	return (uint8_t)result;
 }
 
-static int64_t solve_action_for_variable_settings(Action* act_arg, uint32_t variable_settings){
+static int64_t solve_action_for_variable_settings(Action* act_arg, uint64_t variable_settings){
 	int64_t accumulator = 0;
 	//go through the action and process it
 
@@ -218,21 +218,20 @@ bool EQL_Action(const Action* a1, const Action* a2){
 	This works, right? (ignoring floating point)
 	*/
 
-	size_t num_variables_in = find_number_of_variables_in_action((Action*)a1);
+	uint64_t num_variables_in = find_number_of_variables_in_action((Action*)a1);
 	if (num_variables_in != find_number_of_variables_in_action((Action*)a2)){
 		return false;
 	}
 
-	//convert int to bit sequence (haha i'm so clever)
-	uint32_t seq_i = 0;
-	do{
+	//generate all binary combinations for n variables (as an integer)
+	uint64_t num_combinations = pow(2, num_variables_in);
+	for (uint64_t seq = 0; seq < num_combinations; seq++){
 		//set the variables and solve (always do once in case theres no variables)
-		int64_t result_1 = solve_action_for_variable_settings((Action*)a1, seq_i);
-		if (result_1 != solve_action_for_variable_settings((Action*)a2, seq_i)){
+		int64_t result_1 = solve_action_for_variable_settings((Action*)a1, seq);
+		if (result_1 != solve_action_for_variable_settings((Action*)a2, seq)){
 			return false;
 		}
-		seq_i++;
-	} while (seq_i < num_variables_in);
+	}
 
 	return true;
 }

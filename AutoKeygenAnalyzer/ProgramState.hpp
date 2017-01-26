@@ -11,8 +11,9 @@
 //state of CPU. Stores registers and mem locations (registers)
 typedef struct {
 	std::vector<Register> registers;
-	//bytes are little endian ordered
-	std::unordered_map<Action, Register, ActionHash, ActionCompare> memory_locations;//since a memory location can be defined by a register value, the location is represented as an action chain
+	//since a memory location can be defined by a register value, the location is represented as an action chain
+	//each memory location only represents a single byte
+	std::unordered_map<Action, Register, ActionHash, ActionCompare> memory_locations;
 } Current_Program_State;
 
 extern Current_Program_State current_program_state;

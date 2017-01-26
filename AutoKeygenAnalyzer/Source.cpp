@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <assert.h>
+#include <vector>
 
 #include <unicorn/unicorn.h>
 
@@ -45,31 +46,55 @@ int main(void){
 	*/
 
 	/*
-	mov    DWORD PTR [eax],ebx
-	add    eax,0x1
-	mov    DWORD PTR [eax+0xa],ecx 
+	//esp{0,1,2} is key bytes, checksum for them is in eax
+	add eax, 500
+	mov eax, byte ptr [esp]
+	add eax, byte ptr [esp+1]
+	add eax, byte ptr [esp+2]
 	*/
-	uint8_t input_function_codebytes[8] = { 0x89, 0x18, 0x83, 0xC0, 0x01, 0x89, 0x48, 0x0A };
+	uint8_t input_function_codebytes[] = { 0x05, 0xF4, 0x01, 0x00, 0x00, 0x8A, 0x04, 0x24, 0x02, 0x44, 0x24, 0x01, 0x02, 0x44, 0x24, 0x02 };
 
-	for (size_t i = X86_REG_AH; i < X86_REG_ENDING/*TODO NUM REGISTERS*/; i++){
+	//initalize all the (combined) registers.
+	for (size_t i = 0; i < 300/*TODO NUM REGISTERS*/; i++){
 		Register reg;
 		current_program_state.registers.push_back(reg);
 	}
 
 	//bootstrap by action_chain.push_back(KEY_DATA, LOAD) to the registers/memlocations that have key
-	/*for (key_locations){
+
+	std::vector<size_t> register_key_locations = {};
+
+	//dont need to set any of the info variables (key, constant, action) for these, since register exists as preexisting item
+	Action esp_mem_0;
+	Init_Action(&esp_mem_0, LOAD, ACCUMULATOR);
+
+	Action mem_plus_1;
+	Init_Action(&mem_plus_1, ADD, CONSTANT, 1);
+	Action esp_mem_1;
+	Init_Action(&esp_mem_1, LOAD, { mem_plus_1 });
+
+	Action mem_plus_2;
+	Init_Action(&mem_plus_2, ADD, CONSTANT, 2);
+	Action esp_mem_2;
+	Init_Action(&esp_mem_2, LOAD, { mem_plus_2 });
+
+	std::vector<Action> memory_key_locations = { esp_mem_0, esp_mem_1, esp_mem_2 };//this is every byte, no larger
+
+	for (size_t i = 0; i < register_key_locations.size(); i++){
 		Action key_boot_action;
-		Init_Action(&key_boot_action, LOAD, KEY_DATA, -1);
+		Init_Action(&key_boot_action, LOAD, KEY_DATA);
 		create_new_variable_for_key_byte(&key_boot_action);
-		if (is_register){
-			current_program_state.registers[key_location].action_chain.push_back(key_boot_action);
-		}
-		//this is every byte, no larger
-		else if (is_memory){
-			current_program_state.memory_locations[key_location] = {};
-			current_program_state.memory_locations[key_location].action_chain.push_back(key_boot_action);
-		}
-	}*/
+
+		current_program_state.registers[register_key_locations[i]].action_chain.push_back(key_boot_action);
+	}
+	for (size_t i = 0; i < memory_key_locations.size(); i++){
+		Action key_boot_action;
+		Init_Action(&key_boot_action, LOAD, KEY_DATA);
+		create_new_variable_for_key_byte(&key_boot_action);
+
+		current_program_state.memory_locations[memory_key_locations[i]] = {};
+		current_program_state.memory_locations[memory_key_locations[i]].action_chain.push_back(key_boot_action);
+	}
 
 	uc_engine *uc;
 	uc_err err;
@@ -150,6 +175,7 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 		printf("Failed to read instruction, quit!\n");
 		assert(false);
 	}
+	//TODO what if just cut out the Middle man: my generic Instruction? That makes this too interconnected maybe.
 	std::vector<Instruction> instructions = convert_asm_to_instruction(asm_bytes, size);
 
 	for (size_t i = 0; i < instructions.size(); i++){
@@ -181,26 +207,23 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 												 current_program_state.memory_locations[from_address_w_offset].action_chain[0].storage == KEY_DATA;
 						mem_locations_are_const &= current_program_state.memory_locations[from_address_w_offset].action_chain.size() == 1 &&
 												   current_program_state.memory_locations[from_address_w_offset].action_chain[0].storage == CONSTANT;
+						//can't check for accumulator here since action_chain can be >1, so don't know where to look
 					}
 				}
 				mem_locations_are_accum = !mem_locations_are_key && !mem_locations_are_const;
 
 				//if mem locations arn't known to us, it can't be a key (since key mem/locations created on init)
 				if (!mem_locations_exists){
-					//only option must be this load is some constant/bootstrap value for key verify
-
+					//only option must be this load is some constant/bootstrap value for key verify. mark each memory byte
 					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
 						current_program_state.memory_locations[memory_load_bytes[i]] = {};
 						Action act;
-						//store in little endian order
-						uint64_t mask = 0xFF << (i * 8);
-						int64_t maskd_and_reshifted_imm = ((instr.constant_val & mask) >> (i * 8));//modify constant for the byte distrubution (select a single byte)
-						Init_Action(&act, LOAD, CONSTANT, maskd_and_reshifted_imm);
+						Init_Action(&act, LOAD, CONSTANT, the_constant_currently_in_memory_location);
 						current_program_state.memory_locations[memory_load_bytes[i]].action_chain.push_back(act);
 					}
 
 					Action act;
-					Init_Action(&act, LOAD, CONSTANT, instr.constant_val);
+					Init_Action(&act, LOAD, CONSTANT, the_constant_currently_in_memory_locations);
 					current_program_state.registers[instr.register_i_to].action_chain.clear();
 					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
 				}

@@ -1,7 +1,7 @@
 #include <assert.h>
 
 #include "Instruction.hpp"
-#include "ProgramState.hpp"
+#include "X86_Convert.hpp"
 
 static csh handle = NULL;
 static cs_arch asm_arch;
@@ -12,8 +12,6 @@ bool init_capstone(cs_arch asm_arch_arg, cs_mode asm_mode){
 	cs_err err2 = cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
 	return (err == CS_ERR_OK && err2 == CS_ERR_OK);
 }
-
-void interpret_x86(std::vector<Instruction>* instructions, cs_insn *decod_instr);
 
 std::vector<Instruction> convert_asm_to_instruction(uint8_t* asm_bytes, uint32_t size){
 	assert(handle != NULL);
@@ -49,150 +47,4 @@ std::vector<Instruction> convert_asm_to_instruction(uint8_t* asm_bytes, uint32_t
 
 	cs_free(decod_instr, count);
 	return instructions;
-}
-
-void interpret_x86(std::vector<Instruction>* instructions, cs_insn *decod_instr){
-	Instruction instr;
-
-	/* Determine instruction operands and their type */
-	for (uint8_t i = 0; i < decod_instr->detail->x86.op_count; i++){
-		cs_x86_op operand = decod_instr->detail->x86.operands[i];
-		//FIXME assuming 1st register is always destination right now
-		switch (operand.type){
-			case X86_OP_REG:
-			{
-				if (i == 0){
-					instr.register_i_to = operand.reg;
-				}
-				else{
-					instr.register_i_from.push_back(operand.reg);
-				}
-				break;
-			}
-
-			case X86_OP_IMM:
-			{
-				assert(i != 0);//destination can't be immediate
-				instr.constant_val_has = true;
-				instr.constant_val = operand.imm;
-				break;
-			}
-
-			case X86_OP_MEM:
-			{
-				//create an action chain defining the memory location using the used regiser's action chain and the immediates
-				//base + index*scale + disp 
-				std::vector<Action> actions;
-				if (operand.mem.segment != X86_REG_INVALID){
-					Action act;
-					Init_Action(&act, ADD, current_program_state.registers[operand.mem.segment].action_chain);
-					actions.push_back(act);
-				}
-				if (operand.mem.base != X86_REG_INVALID){
-					Action act;
-					Init_Action(&act, ADD, current_program_state.registers[operand.mem.base].action_chain);
-					actions.push_back(act);
-				}
-				if (operand.mem.index != X86_REG_INVALID){
-					std::vector<Action> act;
-
-					Action a1;
-					Init_Action(&a1, ADD, current_program_state.registers[operand.mem.index].action_chain);
-					act.push_back(a1);
-
-					Action a2;
-					Init_Action(&a2, MULTIPLY, CONSTANT, operand.mem.scale);
-					act.push_back(a2);
-
-					Action act_index_n_scale;
-					Init_Action(&act_index_n_scale, ADD, act);
-					actions.push_back(act_index_n_scale);
-				}
-				Action act_disp;
-				Init_Action(&act_disp, ADD, CONSTANT, operand.mem.disp);
-				actions.push_back(act_disp);
-
-				Action act_final;
-				Init_Action(&act_final, ADD, actions);
-				if (i == 0){
-					instr.mem_address_to = act_final;
-				}
-				else{
-					instr.mem_address_from = act_final;
-				}
-				instr.num_read_bytes = 4;//TMP MUST FIX
-				break;
-			}
-
-			//not going to handle floating point right now
-			case X86_OP_FP:
-			default:
-				assert(false);
-				break;
-		}
-	}
-
-	/* Determine instruction type */
-	switch (decod_instr->id){
-		//ADD
-		case X86_INS_ADC:
-		case X86_INS_ADCX:
-		case X86_INS_ADD:
-		case X86_INS_ADOX:
-		{
-			instr.action = ADD;
-			instructions->push_back(instr);
-			break;
-		}
-		//AND
-		case X86_INS_AND:
-		{
-			instr.action = AND;
-			instructions->push_back(instr);
-			break;
-		}
-		case X86_INS_ANDN:
-		{
-			Instruction instr2;
-			memcpy(&instr2, &instr, sizeof(Instruction));
-			instr.action = AND;
-			instructions->push_back(instr);
-			instr2.action = BIT_INVERT;
-			instructions->push_back(instr2);
-			break;
-		}
-		// LOAD/MOVE/STORE
-		case X86_INS_MOV:
-			if (decod_instr->detail->x86.operands[0].type == X86_OP_REG && decod_instr->detail->x86.operands[1].type == X86_OP_MEM){
-				instr.action = LOAD;
-				instructions->push_back(instr);
-			}
-			else if (decod_instr->detail->x86.operands[0].type == X86_OP_REG && decod_instr->detail->x86.operands[1].type == X86_OP_IMM){
-				instr.action = MOVE;
-				instructions->push_back(instr);
-			}
-			else if (decod_instr->detail->x86.operands[0].type == X86_OP_REG && decod_instr->detail->x86.operands[1].type == X86_OP_REG){
-
-			}
-			else if (decod_instr->detail->x86.operands[0].type == X86_OP_MEM && decod_instr->detail->x86.operands[1].type == X86_OP_REG){
-				instr.action = STORE;
-				instructions->push_back(instr);
-			}
-			else if (decod_instr->detail->x86.operands[0].type == X86_OP_MEM && decod_instr->detail->x86.operands[1].type == X86_OP_MEM){
-
-			}
-			else if (decod_instr->detail->x86.operands[0].type == X86_OP_MEM && decod_instr->detail->x86.operands[1].type == X86_OP_IMM){
-				instr.action = MOVE;
-				instructions->push_back(instr);
-			}
-			break;
-		//SUBTRACT,
-		//MULTIPLY,
-		//DIVIDE,
-		//OR,
-		//XOR,
-		//BIT_INVERT,
-		//ABS_VAL,
-		//CMP_JMP
-	}
 }

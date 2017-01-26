@@ -27,6 +27,7 @@ struct Action{
 	std::vector<Action> actions;//used if these action must be interprited in isolation
 };
 
+void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor);
 void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, std::vector<size_t> key_byte_variables_i);
 void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, int64_t arg);
 void Init_Action(Action* action, Instruction_Types op, std::vector<Action> prev_actions);

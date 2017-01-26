@@ -5,6 +5,11 @@
 
 #include "Action.hpp"
 
+void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor){
+	action->operation = op;
+	action->storage = stor;
+}
+
 void Init_Action(Action* action, Instruction_Types op, STORAGE_OPTION stor, std::vector<size_t> key_byte_variables_i){
 	action->operation = op;
 	action->storage = stor;

@@ -149,6 +149,7 @@
     <ClCompile Include="Instruction.cpp" />
     <ClCompile Include="ProgramState.cpp" />
     <ClCompile Include="Source.cpp" />
+    <ClCompile Include="X86_Convert.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Action.hpp" />
@@ -156,6 +157,7 @@
     <ClInclude Include="Instruction_Types.hpp" />
     <ClInclude Include="ProgramState.hpp" />
     <ClInclude Include="Register.hpp" />
+    <ClInclude Include="X86_Convert.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -9,9 +9,8 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    <Filter Include="ASM">
+      <UniqueIdentifier>{ad45e3d2-a44c-4f62-9a34-4a733cf02663}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -21,17 +20,17 @@
     <ClCompile Include="Action.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Instruction.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ProgramState.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Instruction.cpp">
+      <Filter>ASM</Filter>
+    </ClCompile>
+    <ClCompile Include="X86_Convert.cpp">
+      <Filter>ASM</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Instruction.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Action.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -41,8 +40,14 @@
     <ClInclude Include="ProgramState.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Instruction.hpp">
+      <Filter>ASM</Filter>
+    </ClInclude>
+    <ClInclude Include="X86_Convert.hpp">
+      <Filter>ASM</Filter>
+    </ClInclude>
     <ClInclude Include="Instruction_Types.hpp">
-      <Filter>Header Files</Filter>
+      <Filter>ASM</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

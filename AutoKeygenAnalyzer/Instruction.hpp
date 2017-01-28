@@ -10,16 +10,19 @@
 #include "Instruction_Types.hpp"
 
 typedef struct Instruction_S {
+	//Mutually exclusive
 	int32_t register_i_to = -1;
-	std::vector<uint32_t> register_i_from;//max size of 2, min of 1
-
-	//since a memory address can use regiser values, define it as an action history
+	bool generate_tmp_register = false;
 	Action mem_address_to;
-	Action mem_address_from;
-	uint8_t num_read_bytes = 0;
+
+	//Mutually exclusive
+	std::vector<uint32_t> register_i_from;
+	std::vector<Action> mem_addresses_from;
+	int64_t constant_val;
 
 	bool constant_val_has = false;
-	int64_t constant_val;
+
+	uint8_t num_read_bytes = 0;//size of mem ptr (if mem read from)
 
 	Instruction_Types action = INVALID_OPERATION;
 } Instruction;

@@ -12,6 +12,9 @@
     <Filter Include="ASM">
       <UniqueIdentifier>{ad45e3d2-a44c-4f62-9a34-4a733cf02663}</UniqueIdentifier>
     </Filter>
+    <Filter Include="metaASM">
+      <UniqueIdentifier>{79d90a07-244c-4526-987c-1f19837fda01}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Source.cpp">
@@ -28,6 +31,9 @@
     </ClCompile>
     <ClCompile Include="X86_Convert.cpp">
       <Filter>ASM</Filter>
+    </ClCompile>
+    <ClCompile Include="metaasm_parser.cpp">
+      <Filter>metaASM</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -48,6 +54,9 @@
     </ClInclude>
     <ClInclude Include="Instruction_Types.hpp">
       <Filter>ASM</Filter>
+    </ClInclude>
+    <ClInclude Include="metaasm_parser.hpp">
+      <Filter>metaASM</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

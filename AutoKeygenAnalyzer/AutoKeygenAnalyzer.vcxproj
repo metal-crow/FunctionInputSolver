@@ -147,6 +147,7 @@
   <ItemGroup>
     <ClCompile Include="Action.cpp" />
     <ClCompile Include="Instruction.cpp" />
+    <ClCompile Include="metaasm_parser.cpp" />
     <ClCompile Include="ProgramState.cpp" />
     <ClCompile Include="Source.cpp" />
     <ClCompile Include="X86_Convert.cpp" />
@@ -155,6 +156,7 @@
     <ClInclude Include="Action.hpp" />
     <ClInclude Include="Instruction.hpp" />
     <ClInclude Include="Instruction_Types.hpp" />
+    <ClInclude Include="metaasm_parser.hpp" />
     <ClInclude Include="ProgramState.hpp" />
     <ClInclude Include="Register.hpp" />
     <ClInclude Include="X86_Convert.hpp" />

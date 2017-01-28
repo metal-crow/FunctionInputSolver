@@ -5,6 +5,7 @@
 
 #include <unicorn/unicorn.h>
 
+#include "metaasm_parser.hpp"
 #include "Instruction.hpp"
 #include "Action.hpp"
 #include "Register.hpp"
@@ -18,7 +19,7 @@ void create_new_variable_for_key_byte(Action* act){
 	key_byte_variables.push_back(*act);
 }
 
-size_t find_variable_i_for_key_byte(Action* act){
+/*size_t find_variable_i_for_key_byte(Action* act){
 	for (size_t i = 0; i < key_byte_variables.size(); i++){
 		if (EQL_Action(act, &key_byte_variables[i])){
 			return i;
@@ -26,7 +27,7 @@ size_t find_variable_i_for_key_byte(Action* act){
 	}
 	key_byte_variables.push_back(*act);
 	return key_byte_variables.size() - 1;
-}
+}*/
 
 // callback for tracing instruction
 static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, void *user_data);
@@ -178,144 +179,18 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 	//TODO what if just cut out the Middle man: my generic Instruction? That makes this too interconnected maybe.
 	std::vector<Instruction> instructions = convert_asm_to_instruction(asm_bytes, size);
 
+	Register tmp_reg;
+
 	for (size_t i = 0; i < instructions.size(); i++){
 		Instruction instr = instructions[i];
 		switch (instr.action){
 			case LOAD:
-			{
-				bool mem_locations_exists = true;
-				bool mem_locations_are_key = true;
-				bool mem_locations_are_const = true;
-				bool mem_locations_are_accum;
-
-				//generate actions defining accesing each individual byte
-				std::vector<Action> memory_load_bytes = std::vector<Action>(instr.num_read_bytes);
-				for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-					Action from_address_w_offset = instr.mem_address_from;
-					Action act_addi;
-					Init_Action(&act_addi, ADD, CONSTANT, i);
-					from_address_w_offset.actions.push_back(act_addi);
-
-					memory_load_bytes.push_back(from_address_w_offset);
-
-					//check this byte exists as memory location
-					mem_locations_exists &= (current_program_state.memory_locations.count(from_address_w_offset)>0);
-					//check this byte is a key
-					if (mem_locations_exists){
-						//FIXME: problem if loading from half key, half other stuff
-						mem_locations_are_key &= current_program_state.memory_locations[from_address_w_offset].action_chain.size() == 1 && 
-												 current_program_state.memory_locations[from_address_w_offset].action_chain[0].storage == KEY_DATA;
-						mem_locations_are_const &= current_program_state.memory_locations[from_address_w_offset].action_chain.size() == 1 &&
-												   current_program_state.memory_locations[from_address_w_offset].action_chain[0].storage == CONSTANT;
-						//can't check for accumulator here since action_chain can be >1, so don't know where to look
-					}
-				}
-				mem_locations_are_accum = !mem_locations_are_key && !mem_locations_are_const;
-
-				//if mem locations arn't known to us, it can't be a key (since key mem/locations created on init)
-				if (!mem_locations_exists){
-					//only option must be this load is some constant/bootstrap value for key verify. mark each memory byte
-					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-						current_program_state.memory_locations[memory_load_bytes[i]] = {};
-						Action act;
-						Init_Action(&act, LOAD, CONSTANT, the_constant_currently_in_memory_location);
-						current_program_state.memory_locations[memory_load_bytes[i]].action_chain.push_back(act);
-					}
-
-					Action act;
-					Init_Action(&act, LOAD, CONSTANT, the_constant_currently_in_memory_locations);
-					current_program_state.registers[instr.register_i_to].action_chain.clear();
-					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
-				}
-				//if locations are known and marked as key
-				else if (mem_locations_exists && mem_locations_are_key){		
-					//create array for the key variable indexes
-					std::vector<size_t> key_byte_variable_indexs;
-					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-						key_byte_variable_indexs.push_back(find_variable_i_for_key_byte(&memory_load_bytes[i]));
-					}
-
-					//since we're loading from a pure key, we can just reset the register
-					current_program_state.registers[instr.register_i_to].action_chain.clear();
-					Action act;
-					Init_Action(&act, LOAD, KEY_DATA, key_byte_variable_indexs);
-					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
-				}
-				//if its a known constant
-				else if (mem_locations_exists && mem_locations_are_const){
-					Action act_imm;
-					Init_Action(&act_imm, LOAD, CONSTANT, 0);
-					//convert the bytes in memory to full load
-					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-						//little endian load
-						act_imm.const_value |= (current_program_state.memory_locations[memory_load_bytes[i]].action_chain[0].const_value << (i * 8));
-					}
-					//clear register and load constant
-					current_program_state.registers[instr.register_i_to].action_chain.clear();
-					current_program_state.registers[instr.register_i_to].action_chain.push_back(act_imm);
-				}
-				//if its an accumulator
-				/*example
-				key[0]												  key[1]												key[2]
-
-				{load,key_val,0}									  {load,key_val,1}										{load,key_val,2}
-				{load,key_val,0},{add,const,1}						  {load,key_val,1},{add,const,2}						{load,key_val,2},{add,const,3}
-
-				{{load,key_val,0},{add,const,1}}, {lshift, accum, 0}, {{load,key_val,1},{add,const,2}}, {lshift, accum, 8}, {{load,key_val,2},{add,const,3}}, {lshift, accum, 16}
-				*/
-				else if (mem_locations_exists && mem_locations_are_accum){
-					//load all the loaded bytes action chains into the register's action chain
-					current_program_state.registers[instr.register_i_to].action_chain.clear();
-
-					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-						Action act;
-						Init_Action(&act, LOAD, current_program_state.memory_locations[memory_load_bytes[i]].action_chain);
-						current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
-						Action act_shift;
-						Init_Action(&act_shift, LEFT_SHIFT, ACCUMULATOR, (i*8));
-						current_program_state.registers[instr.register_i_to].action_chain.push_back(act_shift);
-					}
-				}
-				//??? Dunno
-				else{
-					assert(false);
-				}
+				load_from_mem_instr(instr, &tmp_reg);
 				break;
-			}
 
-			//moving an immediate means this register's history is reset, and it is only a constant
 			case MOVE:
-			{
-				Action act;
-				Init_Action(&act, LOAD, CONSTANT, instr.constant_val);
-				//immediate into register
-				if (instr.register_i_to != -1){
-					current_program_state.registers[instr.register_i_to].action_chain.clear();
-					current_program_state.registers[instr.register_i_to].action_chain.push_back(act);
-				}
-				//immediate into memory
-				else if (instr.num_read_bytes > 0){
-					for (uint8_t i = 0; i < instr.num_read_bytes; i++){
-						//modify const for single byte
-						uint64_t mask = 0xFF << (i * 8);
-						act.const_value = ((act.const_value & mask) >> (i * 8));//modify constant for the byte distrubution (select a single byte)
-
-						//generate location
-						Action from_address_w_offset = instr.mem_address_from;
-						Action act_addi;
-						Init_Action(&act_addi, ADD, CONSTANT, i);
-						from_address_w_offset.actions.push_back(act_addi);
-
-						//save const action to location
-						current_program_state.memory_locations[from_address_w_offset].action_chain.clear();
-						current_program_state.memory_locations[from_address_w_offset].action_chain.push_back(act);
-					}
-				}
-				else{
-					assert(false);//dont know what happened here
-				}
+				mov_instr(instr, &tmp_reg);
 				break;
-			}
 
 			//copy the register and its history into mem
 			case STORE:
@@ -326,31 +201,31 @@ static void hook_instruction(uc_engine *uc, uint64_t address, uint32_t size, voi
 			}
 
 			case ADD:
-				copy_from_action_histories(&instr);
+				action_instr(&instr);
 				break;
 
 			case SUBTRACT:
-				copy_from_action_histories(&instr);
+				action_instr(&instr);
 				break;
 
 			case MULTIPLY:
-				copy_from_action_histories(&instr);
+				action_instr(&instr);
 				break;
 
 			case DIVIDE:
-				copy_from_action_histories(&instr);
+				action_instr(&instr);
 				break;
 
 			case AND:
-				copy_from_action_histories(&instr);
+				action_instr(&instr);
 				break;
 
 			case OR:
-				copy_from_action_histories(&instr);
+				action_instr(&instr);
 				break;
 
 			case XOR:
-				copy_from_action_histories(&instr);
+				action_instr(&instr);
 				break;
 
 			case CMP_JMP:

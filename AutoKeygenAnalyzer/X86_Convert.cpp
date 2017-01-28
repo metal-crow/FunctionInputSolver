@@ -502,7 +502,8 @@ void interpret_x86(std::vector<Instruction>* instructions, cs_insn *decod_instr)
 				instr.num_read_bytes = reg_info.size_in_bytes;//Size of given register. Can have this in loop since all register sizes must match
 				//handle AH, BH, etc case.
 				if (reg_info.byte_offset_left > 0){
-					assert(false);//TODO guhhhhhh how do handle writes into subbytes of a register?
+					instr.generate_tmp_register = true;
+					assert(false);//TODO
 				}
 
 				if (i == 0){
@@ -562,7 +563,7 @@ void interpret_x86(std::vector<Instruction>* instructions, cs_insn *decod_instr)
 					instr.mem_address_to = act_final;
 				}
 				else{
-					instr.mem_address_from = act_final;
+					instr.mem_addresses_from.push_back(act_final);
 				}
 				break;
 			}
